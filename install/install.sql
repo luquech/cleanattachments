@@ -1,11 +1,11 @@
 CREATE TABLE IF NOT EXISTS `glpi_plugin_cleanattachments_config` (
-    `id` int(11) NOT NULL AUTO_INCREMENT,
-    `entities_id` int(11) NOT NULL DEFAULT '0',
-    `itilcategories_id` int(11) NOT NULL DEFAULT '0',
-    `ticket_status` int(11) NOT NULL DEFAULT '5',
-    `interval_days` int(11) NOT NULL DEFAULT '60',
+    `id` INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+    `entities_id` INT(11) UNSIGNED NOT NULL DEFAULT '0',
+    `itilcategories_id` INT(11) UNSIGNED NOT NULL DEFAULT '0',
+    `ticket_status` INT(11) NOT NULL DEFAULT '5',
+    `interval_days` INT(11) NOT NULL DEFAULT '60',
     `interval_unit` ENUM('days', 'minutes') NOT NULL DEFAULT 'days',
-    `is_active` tinyint(1) NOT NULL DEFAULT '1',
+    `is_active` TINYINT(1) NOT NULL DEFAULT '1',
     PRIMARY KEY (`id`),
     KEY `entities_id` (`entities_id`),
     KEY `itilcategories_id` (`itilcategories_id`)
