@@ -5,7 +5,7 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
         switch ($name) {
             case 'cleanAttachments':
                 return [
-                    'description' => __('Remove anexos conforme regras configuradas (dias ou minutos)')
+                    'description' => __('Remove anexos e imagens de tickets conforme regras configuradas')
                 ];
         }
         return [];
@@ -45,6 +45,7 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
                 $dateField = 'date_mod';
             }
 
+            // 1. Busca os tickets que atendem à regra
             $tickets = $DB->request([
                 'FROM'  => 'glpi_tickets',
                 'WHERE' => [
@@ -56,8 +57,10 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
             ]);
 
             $ticketIds = [];
+            $ticketData = []; // Guarda dados dos tickets para uso posterior
             foreach ($tickets as $t) {
                 $ticketIds[] = $t['id'];
+                $ticketData[$t['id']] = $t;
             }
 
             if (empty($ticketIds)) {
@@ -65,8 +68,9 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
                 continue;
             }
 
+            // 2. Busca documentos vinculados DIRETAMENTE ao ticket
             $docItemTable = 'glpi_documents_items';
-            $links = $DB->request([
+            $directLinks = $DB->request([
                 'FROM'  => $docItemTable,
                 'WHERE' => [
                     'items_id' => $ticketIds,
@@ -74,20 +78,144 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
                 ]
             ]);
 
+            // Array para rastrear quais documentos pertencem a qual ticket
+            $ticketDocuments = []; // ticket_id => [doc_id => filename]
             $documentIds = [];
-            foreach ($links as $link) {
+
+            foreach ($directLinks as $link) {
                 $documentIds[] = $link['documents_id'];
+                $ticketDocuments[$link['items_id']][$link['documents_id']] = true;
             }
 
+            // 3. Busca IDs de acompanhamentos (ITILFollowup) desses tickets
+            $followups = $DB->request([
+                'FROM'  => 'glpi_itilfollowups',
+                'WHERE' => [
+                    'items_id' => $ticketIds,
+                    'itemtype' => 'Ticket'
+                ]
+            ]);
+            $followupIds = [];
+            $followupTicketMap = []; // followup_id => ticket_id
+            foreach ($followups as $f) {
+                $followupIds[] = $f['id'];
+                $followupTicketMap[$f['id']] = $f['items_id'];
+            }
+
+            // 4. Busca documentos vinculados aos acompanhamentos
+            if (!empty($followupIds)) {
+                $followupLinks = $DB->request([
+                    'FROM'  => $docItemTable,
+                    'WHERE' => [
+                        'items_id' => $followupIds,
+                        'itemtype' => 'ITILFollowup'
+                    ]
+                ]);
+                foreach ($followupLinks as $link) {
+                    $documentIds[] = $link['documents_id'];
+                    $ticketId = $followupTicketMap[$link['items_id']] ?? null;
+                    if ($ticketId) {
+                        $ticketDocuments[$ticketId][$link['documents_id']] = true;
+                    }
+                }
+            }
+
+            // 5. Busca IDs de tarefas (TicketTask) desses tickets
+            $tasks = $DB->request([
+                'FROM'  => 'glpi_tickettasks',
+                'WHERE' => [
+                    'tickets_id' => $ticketIds
+                ]
+            ]);
+            $taskIds = [];
+            $taskTicketMap = []; // task_id => ticket_id
+            foreach ($tasks as $t) {
+                $taskIds[] = $t['id'];
+                $taskTicketMap[$t['id']] = $t['tickets_id'];
+            }
+
+            // 6. Busca documentos vinculados às tarefas
+            if (!empty($taskIds)) {
+                $taskLinks = $DB->request([
+                    'FROM'  => $docItemTable,
+                    'WHERE' => [
+                        'items_id' => $taskIds,
+                        'itemtype' => 'TicketTask'
+                    ]
+                ]);
+                foreach ($taskLinks as $link) {
+                    $documentIds[] = $link['documents_id'];
+                    $ticketId = $taskTicketMap[$link['items_id']] ?? null;
+                    if ($ticketId) {
+                        $ticketDocuments[$ticketId][$link['documents_id']] = true;
+                    }
+                }
+            }
+
+            // 7. Busca IDs de soluções (ITILSolution) desses tickets
+            $solutions = $DB->request([
+                'FROM'  => 'glpi_itilsolutions',
+                'WHERE' => [
+                    'items_id' => $ticketIds,
+                    'itemtype' => 'Ticket'
+                ]
+            ]);
+            $solutionIds = [];
+            $solutionTicketMap = []; // solution_id => ticket_id
+            foreach ($solutions as $s) {
+                $solutionIds[] = $s['id'];
+                $solutionTicketMap[$s['id']] = $s['items_id'];
+            }
+
+            // 8. Busca documentos vinculados às soluções
+            if (!empty($solutionIds)) {
+                $solutionLinks = $DB->request([
+                    'FROM'  => $docItemTable,
+                    'WHERE' => [
+                        'items_id' => $solutionIds,
+                        'itemtype' => 'ITILSolution'
+                    ]
+                ]);
+                foreach ($solutionLinks as $link) {
+                    $documentIds[] = $link['documents_id'];
+                    $ticketId = $solutionTicketMap[$link['items_id']] ?? null;
+                    if ($ticketId) {
+                        $ticketDocuments[$ticketId][$link['documents_id']] = true;
+                    }
+                }
+            }
+
+            // Remove duplicatas
+            $documentIds = array_unique($documentIds);
+
             if (empty($documentIds)) {
-                $task->log(sprintf(__('Regra #%d: tickets sem anexos.', 'cleanattachments'), $rule['id']));
+                $task->log(sprintf(__('Regra #%d: tickets sem anexos/imagens.', 'cleanattachments'), $rule['id']));
                 continue;
             }
 
-            $uniqueDocIds = array_unique($documentIds);
+            // Busca informações dos documentos (nome, tipo) para o log
+            $docInfo = [];
+            if (!empty($documentIds)) {
+                $docIterator = $DB->request([
+                    'FROM'  => 'glpi_documents',
+                    'WHERE' => ['id' => $documentIds]
+                ]);
+                foreach ($docIterator as $doc) {
+                    $docInfo[$doc['id']] = $doc;
+                }
+            }
 
-            foreach ($uniqueDocIds as $docId) {
+            $task->log(sprintf(__('Regra #%d: processando %d documentos.', 'cleanattachments'), $rule['id'], count($documentIds)));
+
+            // 9. Processa cada documento
+            $docsDeletedByTicket = []; // ticket_id => [lista de nomes de documentos excluídos]
+            
+            foreach ($documentIds as $docId) {
+                $docName = $docInfo[$docId]['name'] ?? "Documento #$docId";
+                $deleted = false;
+
                 if ($deleteMode === 'total') {
+                    // Modo total: remove TODOS os vínculos e exclui o documento
                     $allLinks = $DB->request([
                         'FROM'  => $docItemTable,
                         'WHERE' => ['documents_id' => $docId]
@@ -99,24 +227,36 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
                     $document = new Document();
                     if ($document->delete(['id' => $docId], true)) {
                         $processedDocs++;
-                        $task->log(sprintf(__('Documento ID %d excluído completamente.', 'cleanattachments'), $docId));
-                    } else {
-                        $task->log(sprintf(__('Falha ao excluir documento ID %d.', 'cleanattachments'), $docId));
+                        $deleted = true;
+                        $task->log(sprintf(__('Documento "%s" (ID %d) excluído completamente.', 'cleanattachments'), $docName, $docId));
                     }
                 } else {
-                    $linksToRemove = $DB->request([
-                        'FROM'  => $docItemTable,
-                        'WHERE' => [
-                            'documents_id' => $docId,
-                            'items_id'     => $ticketIds,
-                            'itemtype'     => 'Ticket'
-                        ]
-                    ]);
-                    foreach ($linksToRemove as $link) {
-                        $docItem = new Document_Item();
-                        $docItem->delete(['id' => $link['id']], true);
+                    // Modo órfão: remove vínculos com tickets E itens relacionados
+                    // Coleta todos os IDs de itens relacionados ao ticket
+                    $allRelatedItemIds = array_merge(
+                        array_map(function($id) { return ['id' => $id, 'type' => 'Ticket']; }, $ticketIds),
+                        array_map(function($id) { return ['id' => $id, 'type' => 'ITILFollowup']; }, $followupIds),
+                        array_map(function($id) { return ['id' => $id, 'type' => 'TicketTask']; }, $taskIds),
+                        array_map(function($id) { return ['id' => $id, 'type' => 'ITILSolution']; }, $solutionIds)
+                    );
+
+                    // Remove vínculos com os itens relacionados
+                    foreach ($allRelatedItemIds as $item) {
+                        $linksToRemove = $DB->request([
+                            'FROM'  => $docItemTable,
+                            'WHERE' => [
+                                'documents_id' => $docId,
+                                'items_id'     => $item['id'],
+                                'itemtype'     => $item['type']
+                            ]
+                        ]);
+                        foreach ($linksToRemove as $link) {
+                            $docItem = new Document_Item();
+                            $docItem->delete(['id' => $link['id']], true);
+                        }
                     }
 
+                    // Verifica se o documento ficou órfão
                     $remaining = $DB->request([
                         'COUNT'  => 'cpt',
                         'FROM'   => $docItemTable,
@@ -127,13 +267,41 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
                         $document = new Document();
                         if ($document->delete(['id' => $docId], true)) {
                             $processedDocs++;
-                            $task->log(sprintf(__('Documento ID %d excluído (órfão).', 'cleanattachments'), $docId));
-                        } else {
-                            $task->log(sprintf(__('Falha ao excluir documento órfão ID %d.', 'cleanattachments'), $docId));
+                            $deleted = true;
+                            $task->log(sprintf(__('Documento "%s" (ID %d) excluído (ficou órfão).', 'cleanattachments'), $docName, $docId));
                         }
                     } else {
-                        $task->log(sprintf(__('Documento ID %d mantido – ainda possui vínculos.', 'cleanattachments'), $docId));
+                        $task->log(sprintf(__('Documento "%s" (ID %d) mantido – ainda possui %d vínculo(s).', 'cleanattachments'), $docName, $docId, $remaining));
                     }
+                }
+
+                // Se o documento foi excluído, registra para qual ticket
+                if ($deleted) {
+                    foreach ($ticketDocuments as $ticketId => $docs) {
+                        if (isset($docs[$docId])) {
+                            $docsDeletedByTicket[$ticketId][] = $docName;
+                        }
+                    }
+                }
+            }
+
+            // 10. Adiciona acompanhamentos privados nos tickets processados
+            foreach ($docsDeletedByTicket as $ticketId => $deletedDocNames) {
+                if (!empty($deletedDocNames)) {
+                    $followup = new ITILFollowup();
+                    $followupInput = [
+                        'items_id'  => $ticketId,
+                        'itemtype'  => 'Ticket',
+                        'content'   => sprintf(
+                            __('🧹 [Limpeza Automática] Em %s, o plugin Clean Attachments removeu os seguintes anexos/imagens deste chamado (por regra de limpeza):\n\n%s\n\nEsta ação foi executada automaticamente e não altera o status do chamado.', 'cleanattachments'),
+                            date('d/m/Y H:i:s'),
+                            '• ' . implode("\n• ", $deletedDocNames)
+                        ),
+                        'is_private'=> 1, // Acompanhamento privado (visível apenas para técnicos)
+                        'users_id'  => 0,  // Sistema (0 = automático)
+                    ];
+                    $followup->add($followupInput);
+                    $task->log(sprintf(__('Ticket #%d: acompanhamento privado adicionado.', 'cleanattachments'), $ticketId));
                 }
             }
         }

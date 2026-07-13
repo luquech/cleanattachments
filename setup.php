@@ -1,5 +1,5 @@
 <?php
-define('PLUGIN_CLEANATTACHMENTS_VERSION', '1.2.0');
+define('PLUGIN_CLEANATTACHMENTS_VERSION', '1.3.0');
 
 function plugin_init_cleanattachments() {
     global $PLUGIN_HOOKS;
