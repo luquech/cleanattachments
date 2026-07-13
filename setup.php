@@ -1,5 +1,5 @@
 <?php
-define('PLUGIN_CLEANATTACHMENTS_VERSION', '1.1.0');
+define('PLUGIN_CLEANATTACHMENTS_VERSION', '1.2.0');
 
 function plugin_init_cleanattachments() {
     global $PLUGIN_HOOKS;
@@ -19,7 +19,7 @@ function plugin_version_cleanattachments() {
         'version'        => PLUGIN_CLEANATTACHMENTS_VERSION,
         'author'         => 'Anderson Lucas',
         'license'        => 'GPLv2+',
-        'homepage'       => '',
+        'homepage'       => 'https://github.com/luquech/cleanattachments',
         'minGlpiVersion' => '11.0',
         'requirements'   => ['glpi' => ['min' => '11.0']]
     ];
