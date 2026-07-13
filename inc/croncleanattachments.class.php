@@ -5,7 +5,7 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
         switch ($name) {
             case 'cleanAttachments':
                 return [
-                    'description' => __('Remove anexos conforme regras configuradas (tempo em minutos)')
+                    'description' => __('Remove anexos conforme regras configuradas (dias ou minutos)')
                 ];
         }
         return [];
@@ -28,8 +28,15 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
             $status          = $rule['ticket_status'];
             $entity          = $rule['entities_id'];
             $category        = $rule['itilcategories_id'];
-            $minutes         = (int)$rule['interval_days'];
-            $threshold       = date('Y-m-d H:i:s', time() - $days * 86400);
+            $value           = (int)$rule['interval_days'];
+            $unit            = $rule['interval_unit'] ?? 'days';
+
+            // Calcula o threshold conforme a unidade
+            if ($unit === 'minutes') {
+                $threshold = date('Y-m-d H:i:s', time() - $value * 60);
+            } else {
+                $threshold = date('Y-m-d H:i:s', time() - $value * 86400);
+            }
 
             if ($status == Ticket::SOLVED) {
                 $dateField = 'solvedate';
