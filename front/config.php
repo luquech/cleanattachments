@@ -25,7 +25,7 @@ if (isset($_POST['save'])) {
         'itilcategories_id'  => $_POST['itilcategories_id'],
         'ticket_status'      => $_POST['ticket_status'],
         'interval_days'      => $_POST['interval_days'],
-        'interval_unit'      => $_POST['interval_unit'],   // <<< Campo essencial
+        'interval_unit'      => $_POST['interval_unit'],
         'is_active'          => $_POST['is_active']
     ];
     if ($input['id'] > 0) {

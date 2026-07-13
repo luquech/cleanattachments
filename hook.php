@@ -2,12 +2,10 @@
 function plugin_cleanattachments_install() {
     global $DB;
 
-    // Executa o arquivo SQL de instalação (método seguro, não bloqueado)
     $sqlFile = __DIR__ . '/install/install.sql';
     if (file_exists($sqlFile)) {
         $DB->runFile($sqlFile);
     } else {
-        // Fallback (não recomendado, mas mantido para emergência)
         if (method_exists($DB, 'setAllowDirectQuery')) {
             $DB->setAllowDirectQuery(true);
         }
@@ -25,7 +23,6 @@ function plugin_cleanattachments_install() {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     }
 
-    // Registra a tarefa agendada
     CronTask::register(
         'PluginCleanattachmentsCroncleanattachments',
         'cleanAttachments',

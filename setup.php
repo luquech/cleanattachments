@@ -27,13 +27,10 @@ function plugin_version_cleanattachments() {
 
 function plugin_cleanattachments_uninstall() {
     global $DB;
-
-    // Executa o arquivo SQL de desinstalação (método seguro, não bloqueado)
     $sqlFile = __DIR__ . '/install/uninstall.sql';
     if (file_exists($sqlFile)) {
         $DB->runFile($sqlFile);
     } else {
-        // Fallback seguro (não recomendado, mas evita erro)
         if (method_exists($DB, 'setAllowDirectQuery')) {
             $DB->setAllowDirectQuery(true);
         }

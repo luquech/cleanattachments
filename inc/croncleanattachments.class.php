@@ -31,7 +31,6 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
             $value           = (int)$rule['interval_days'];
             $unit            = $rule['interval_unit'] ?? 'days';
 
-            // Calcula o threshold conforme a unidade
             if ($unit === 'minutes') {
                 $threshold = date('Y-m-d H:i:s', time() - $value * 60);
             } else {
