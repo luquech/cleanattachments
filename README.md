@@ -208,8 +208,8 @@ cleanattachments/
 
 <h2 id="autor">👤 Autor</h2>
 <p><strong>Anderson Lucas</strong></p>
-<p>📧 E-mail: <em>(suporte@ufcg.edu.br)</em></p>
-<p>🔗 GitHub: <em>(https://github.com/luquech)</em></p>
+<p>📧 E-mail: <em>suporte@ufcg.edu.br</em></p>
+<p>🔗 GitHub: <em>https://github.com/luquech</em></p>
 
 <hr>
 
