@@ -1,4 +1,3 @@
-sudo tee /var/www/glpi/plugins/cleanattachments/README.md > /dev/null << 'EOF'
 # Clean Attachments - Plugin para GLPI 11
 
 [![License](https://img.shields.io/badge/License-GPLv2+-blue.svg)](LICENSE)
