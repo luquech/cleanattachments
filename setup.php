@@ -1,5 +1,5 @@
 <?php
-define('PLUGIN_CLEANATTACHMENTS_VERSION', '1.3.0');
+define('PLUGIN_CLEANATTACHMENTS_VERSION', '1.3.1');
 
 function plugin_init_cleanattachments() {
     global $PLUGIN_HOOKS;
@@ -19,7 +19,7 @@ function plugin_version_cleanattachments() {
         'version'        => PLUGIN_CLEANATTACHMENTS_VERSION,
         'author'         => 'Anderson Lucas',
         'license'        => 'GPLv2+',
-        'homepage'       => 'https://github.com/luquech/cleanattachments',
+        'homepage'       => '',
         'minGlpiVersion' => '11.0',
         'requirements'   => ['glpi' => ['min' => '11.0']]
     ];
@@ -27,14 +27,14 @@ function plugin_version_cleanattachments() {
 
 function plugin_cleanattachments_uninstall() {
     global $DB;
+
+    // Remove a tarefa automática registrada
+    CronTask::unregister('PluginCleanattachmentsCroncleanattachments');
+
+    // Remove a tabela via arquivo SQL
     $sqlFile = __DIR__ . '/install/uninstall.sql';
     if (file_exists($sqlFile)) {
         $DB->runFile($sqlFile);
-    } else {
-        if (method_exists($DB, 'setAllowDirectQuery')) {
-            $DB->setAllowDirectQuery(true);
-        }
-        $DB->query("DROP TABLE IF EXISTS `glpi_plugin_cleanattachments_config`");
     }
     return true;
 }

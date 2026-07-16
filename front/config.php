@@ -37,8 +37,9 @@ if (isset($_POST['save'])) {
     Html::redirect(Plugin::getWebDir('cleanattachments') . '/front/config.php');
 }
 
-if (isset($_GET['delete'])) {
-    $config->delete(['id' => $_GET['delete']]);
+// Exclusão via POST (proteção CSRF automática)
+if (isset($_POST['delete'])) {
+    $config->delete(['id' => $_POST['delete']]);
     Html::redirect(Plugin::getWebDir('cleanattachments') . '/front/config.php');
 }
 
@@ -48,9 +49,9 @@ echo "<hr>";
 
 $id = $_GET['edit'] ?? 0;
 if ($id > 0) {
-    echo "<h2>".__('Editar regra')."</h2>";
+    echo "<h2>" . htmlescape(__('Editar regra')) . "</h2>";
 } else {
-    echo "<h2>".__('Nova regra')."</h2>";
+    echo "<h2>" . htmlescape(__('Nova regra')) . "</h2>";
 }
 $config->showForm($id);
 

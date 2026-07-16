@@ -46,25 +46,25 @@ class PluginCleanattachmentsConfig extends CommonDBTM {
             ];
         }
 
-        echo "<form method='post' action='".Plugin::getWebDir('cleanattachments')."/front/config.php'>";
-        echo "<input type='hidden' name='id' value='".$this->fields['id']."'>";
+        echo "<form method='post' action='" . Plugin::getWebDir('cleanattachments') . "/front/config.php'>";
+        echo "<input type='hidden' name='id' value='" . $this->fields['id'] . "'>";
         echo "<table class='tab_cadre_fixe'>";
 
-        echo "<tr class='tab_bg_1'><td>".__('Entidade')."</td><td>";
+        echo "<tr class='tab_bg_1'><td>" . __('Entidade') . "</td><td>";
         Dropdown::show('Entity', [
             'name'  => 'entities_id',
             'value' => $this->fields['entities_id']
         ]);
         echo "</td></tr>";
 
-        echo "<tr class='tab_bg_1'><td>".__('Categoria ITIL')."</td><td>";
+        echo "<tr class='tab_bg_1'><td>" . __('Categoria ITIL') . "</td><td>";
         Dropdown::show('ITILCategory', [
             'name'  => 'itilcategories_id',
             'value' => $this->fields['itilcategories_id']
         ]);
         echo "</td></tr>";
 
-        echo "<tr class='tab_bg_1'><td>".__('Status do ticket')."</td><td>";
+        echo "<tr class='tab_bg_1'><td>" . __('Status do ticket') . "</td><td>";
         $statuses = [
             Ticket::SOLVED => __('Solucionado'),
             Ticket::CLOSED => __('Fechado')
@@ -74,13 +74,11 @@ class PluginCleanattachmentsConfig extends CommonDBTM {
         ]);
         echo "</td></tr>";
 
-        // Tempo
-        echo "<tr class='tab_bg_1'><td>".__('Tempo')."</td><td>";
-        echo "<input type='number' name='interval_days' value='".$this->fields['interval_days']."' min='0' step='1' required>";
+        echo "<tr class='tab_bg_1'><td>" . __('Tempo') . "</td><td>";
+        echo "<input type='number' name='interval_days' value='" . $this->fields['interval_days'] . "' min='0' step='1' required>";
         echo "</td></tr>";
 
-        // Unidade (dias/minutos)
-        echo "<tr class='tab_bg_1'><td>".__('Unidade')."</td><td>";
+        echo "<tr class='tab_bg_1'><td>" . __('Unidade') . "</td><td>";
         Dropdown::showFromArray('interval_unit', [
             'days'    => __('Dias'),
             'minutes' => __('Minutos')
@@ -89,12 +87,12 @@ class PluginCleanattachmentsConfig extends CommonDBTM {
         ]);
         echo "</td></tr>";
 
-        echo "<tr class='tab_bg_1'><td>".__('Ativo')."</td><td>";
+        echo "<tr class='tab_bg_1'><td>" . __('Ativo') . "</td><td>";
         Dropdown::showYesNo('is_active', $this->fields['is_active']);
         echo "</td></tr>";
 
         echo "<tr class='tab_bg_2'><td colspan='2' class='center'>";
-        echo "<input type='submit' name='save' value='".__('Salvar')."' class='submit'>";
+        echo "<input type='submit' name='save' value='" . htmlescape(__('Salvar')) . "' class='submit'>";
         echo "</td></tr>";
         echo "</table>";
         Html::closeForm();
@@ -109,27 +107,38 @@ class PluginCleanattachmentsConfig extends CommonDBTM {
         ]);
 
         echo "<table class='tab_cadre_fixe'>";
-        echo "<tr><th>ID</th><th>".__('Entidade')."</th><th>".__('Categoria ITIL')."</th><th>".__('Status')."</th><th>".__('Tempo')."</th><th>".__('Unidade')."</th><th>".__('Ativo')."</th><th></th></tr>";
+        echo "<tr><th>" . __('ID') . "</th><th>" . __('Entidade') . "</th><th>" . __('Categoria ITIL') . "</th><th>" . __('Status') . "</th><th>" . __('Tempo') . "</th><th>" . __('Unidade') . "</th><th>" . __('Ativo') . "</th><th></th></tr>";
 
         foreach ($iterator as $row) {
-            $entity = Dropdown::getDropdownName('glpi_entities', $row['entities_id']);
+            $entity   = Dropdown::getDropdownName('glpi_entities', $row['entities_id']);
             $category = Dropdown::getDropdownName('glpi_itilcategories', $row['itilcategories_id']);
-            $status = ($row['ticket_status'] == Ticket::SOLVED) ? __('Solucionado') : __('Fechado');
-            $active = $row['is_active'] ? __('Sim') : __('Não');
-            $unit   = ($row['interval_unit'] == 'minutes') ? __('Minutos') : __('Dias');
+            $status   = ($row['ticket_status'] == Ticket::SOLVED) ? __('Solucionado') : __('Fechado');
+            $active   = $row['is_active'] ? __('Sim') : __('Não');
+            $unit     = ($row['interval_unit'] == 'minutes') ? __('Minutos') : __('Dias');
 
             echo "<tr class='tab_bg_1'>";
-            echo "<td>".$row['id']."</td>";
-            echo "<td>".$entity."</td>";
-            echo "<td>".$category."</td>";
-            echo "<td>".$status."</td>";
-            echo "<td>".$row['interval_days']."</td>";
-            echo "<td>".$unit."</td>";
-            echo "<td>".$active."</td>";
+            echo "<td>" . htmlescape($row['id']) . "</td>";
+            echo "<td>" . htmlescape($entity) . "</td>";
+            echo "<td>" . htmlescape($category) . "</td>";
+            echo "<td>" . htmlescape($status) . "</td>";
+            echo "<td>" . htmlescape($row['interval_days']) . "</td>";
+            echo "<td>" . htmlescape($unit) . "</td>";
+            echo "<td>" . htmlescape($active) . "</td>";
             echo "<td class='center'>";
-            echo "<a href='?edit=".$row['id']."'><i class='fas fa-edit'></i></a>";
+            
+            // Link de edição
+            echo "<a href='?edit=" . $row['id'] . "'><i class='fas fa-edit'></i></a>";
             echo "&nbsp;";
-            echo "<a href='?delete=".$row['id']."' onclick='return confirm(\"".__('Deseja realmente excluir?')."\")'><i class='fas fa-trash'></i></a>";
+            
+            // Formulário POST para exclusão (proteção CSRF automática)
+            echo "<form method='post' action='" . Plugin::getWebDir('cleanattachments') . "/front/config.php' style='display:inline;'>";
+            echo "<input type='hidden' name='_glpi_csrf_token' value='" . Session::getNewCSRFToken() . "'>";
+            echo "<input type='hidden' name='delete' value='" . $row['id'] . "'>";
+            echo "<button type='submit' class='btn btn-link p-0' onclick='return confirm(\"" . htmlescape(__('Deseja realmente excluir?')) . "\")' title='" . htmlescape(__('Excluir')) . "'>";
+            echo "<i class='fas fa-trash'></i>";
+            echo "</button>";
+            echo "</form>";
+            
             echo "</td></tr>";
         }
         echo "</table>";
