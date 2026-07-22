@@ -31,6 +31,41 @@ class PluginCleanattachmentsConfig extends CommonDBTM {
         return true;
     }
 
+    /**
+     * Valida e sanitiza dados antes da adição.
+     */
+    function prepareInputForAdd($input) {
+        return $this->sanitizeInput($input);
+    }
+
+    /**
+     * Valida e sanitiza dados antes da atualização.
+     */
+    function prepareInputForUpdate($input) {
+        return $this->sanitizeInput($input);
+    }
+
+    /**
+     * Sanitização comum: garante que interval_days seja inteiro >= 0
+     * e que interval_unit seja um valor válido do ENUM.
+     */
+    private function sanitizeInput($input) {
+        // Força inteiro não negativo
+        if (isset($input['interval_days'])) {
+            $input['interval_days'] = max(0, (int)$input['interval_days']);
+        }
+
+        // Valida unidade
+        if (isset($input['interval_unit'])) {
+            $allowed = ['days', 'minutes'];
+            if (!in_array($input['interval_unit'], $allowed)) {
+                $input['interval_unit'] = 'days'; // fallback seguro
+            }
+        }
+
+        return $input;
+    }
+
     function showForm($ID, $options = []) {
         if ($ID > 0) {
             $this->getFromDB($ID);
@@ -47,6 +82,7 @@ class PluginCleanattachmentsConfig extends CommonDBTM {
         }
 
         echo "<form method='post' action='" . Plugin::getWebDir('cleanattachments') . "/front/config.php'>";
+        echo "<input type='hidden' name='_glpi_csrf_token' value='" . Session::getNewCSRFToken() . "'>";
         echo "<input type='hidden' name='id' value='" . $this->fields['id'] . "'>";
         echo "<table class='tab_cadre_fixe'>";
 
@@ -130,7 +166,7 @@ class PluginCleanattachmentsConfig extends CommonDBTM {
             echo "<a href='?edit=" . $row['id'] . "'><i class='fas fa-edit'></i></a>";
             echo "&nbsp;";
             
-            // Formulário POST para exclusão (proteção CSRF automática)
+            // Formulário POST para exclusão com token CSRF
             echo "<form method='post' action='" . Plugin::getWebDir('cleanattachments') . "/front/config.php' style='display:inline;'>";
             echo "<input type='hidden' name='_glpi_csrf_token' value='" . Session::getNewCSRFToken() . "'>";
             echo "<input type='hidden' name='delete' value='" . $row['id'] . "'>";

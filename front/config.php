@@ -37,7 +37,6 @@ if (isset($_POST['save'])) {
     Html::redirect(Plugin::getWebDir('cleanattachments') . '/front/config.php');
 }
 
-// Exclusão via POST (proteção CSRF automática)
 if (isset($_POST['delete'])) {
     $config->delete(['id' => $_POST['delete']]);
     Html::redirect(Plugin::getWebDir('cleanattachments') . '/front/config.php');

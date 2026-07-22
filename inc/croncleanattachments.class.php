@@ -28,7 +28,7 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
             $status          = $rule['ticket_status'];
             $entity          = $rule['entities_id'];
             $category        = $rule['itilcategories_id'];
-            $value           = (int)$rule['interval_days'];
+            $value = max(0, (int)$rule["interval_days"]);
             $unit            = $rule['interval_unit'] ?? 'days';
 
             if ($unit === 'minutes') {
