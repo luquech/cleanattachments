@@ -17,18 +17,25 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
         $cron_status = 0;
         $deleteMode = 'orphan_only';
 
+        // Limite de documentos processados por execução (evita timeout)
+        $maxDocsPerRun = 100;
+        $processedDocs = 0;
+        $stopProcessing = false;
+
         $rules = $DB->request([
             'FROM'  => 'glpi_plugin_cleanattachments_config',
             'WHERE' => ['is_active' => 1]
         ]);
 
-        $processedDocs = 0;
-
         foreach ($rules as $rule) {
+            if ($stopProcessing) {
+                break;
+            }
+
             $status          = $rule['ticket_status'];
             $entity          = $rule['entities_id'];
             $category        = $rule['itilcategories_id'];
-            $value = max(0, (int)$rule["interval_days"]);
+            $value           = max(0, (int)$rule['interval_days']);
             $unit            = $rule['interval_unit'] ?? 'days';
 
             if ($unit === 'minutes') {
@@ -57,7 +64,7 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
             ]);
 
             $ticketIds = [];
-            $ticketData = []; // Guarda dados dos tickets para uso posterior
+            $ticketData = [];
             foreach ($tickets as $t) {
                 $ticketIds[] = $t['id'];
                 $ticketData[$t['id']] = $t;
@@ -78,16 +85,14 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
                 ]
             ]);
 
-            // Array para rastrear quais documentos pertencem a qual ticket
-            $ticketDocuments = []; // ticket_id => [doc_id => filename]
             $documentIds = [];
-
+            $ticketDocuments = [];
             foreach ($directLinks as $link) {
                 $documentIds[] = $link['documents_id'];
                 $ticketDocuments[$link['items_id']][$link['documents_id']] = true;
             }
 
-            // 3. Busca IDs de acompanhamentos (ITILFollowup) desses tickets
+            // 3. Acompanhamentos
             $followups = $DB->request([
                 'FROM'  => 'glpi_itilfollowups',
                 'WHERE' => [
@@ -96,13 +101,12 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
                 ]
             ]);
             $followupIds = [];
-            $followupTicketMap = []; // followup_id => ticket_id
+            $followupTicketMap = [];
             foreach ($followups as $f) {
                 $followupIds[] = $f['id'];
                 $followupTicketMap[$f['id']] = $f['items_id'];
             }
 
-            // 4. Busca documentos vinculados aos acompanhamentos
             if (!empty($followupIds)) {
                 $followupLinks = $DB->request([
                     'FROM'  => $docItemTable,
@@ -120,7 +124,7 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
                 }
             }
 
-            // 5. Busca IDs de tarefas (TicketTask) desses tickets
+            // 4. Tarefas
             $tasks = $DB->request([
                 'FROM'  => 'glpi_tickettasks',
                 'WHERE' => [
@@ -128,13 +132,12 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
                 ]
             ]);
             $taskIds = [];
-            $taskTicketMap = []; // task_id => ticket_id
+            $taskTicketMap = [];
             foreach ($tasks as $t) {
                 $taskIds[] = $t['id'];
                 $taskTicketMap[$t['id']] = $t['tickets_id'];
             }
 
-            // 6. Busca documentos vinculados às tarefas
             if (!empty($taskIds)) {
                 $taskLinks = $DB->request([
                     'FROM'  => $docItemTable,
@@ -152,7 +155,7 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
                 }
             }
 
-            // 7. Busca IDs de soluções (ITILSolution) desses tickets
+            // 5. Soluções
             $solutions = $DB->request([
                 'FROM'  => 'glpi_itilsolutions',
                 'WHERE' => [
@@ -161,13 +164,12 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
                 ]
             ]);
             $solutionIds = [];
-            $solutionTicketMap = []; // solution_id => ticket_id
+            $solutionTicketMap = [];
             foreach ($solutions as $s) {
                 $solutionIds[] = $s['id'];
                 $solutionTicketMap[$s['id']] = $s['items_id'];
             }
 
-            // 8. Busca documentos vinculados às soluções
             if (!empty($solutionIds)) {
                 $solutionLinks = $DB->request([
                     'FROM'  => $docItemTable,
@@ -185,7 +187,6 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
                 }
             }
 
-            // Remove duplicatas
             $documentIds = array_unique($documentIds);
 
             if (empty($documentIds)) {
@@ -193,7 +194,7 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
                 continue;
             }
 
-            // Busca informações dos documentos (nome, tipo) para o log
+            // Busca informações dos documentos
             $docInfo = [];
             if (!empty($documentIds)) {
                 $docIterator = $DB->request([
@@ -207,15 +208,19 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
 
             $task->log(sprintf(__('Regra #%d: processando %d documentos.', 'cleanattachments'), $rule['id'], count($documentIds)));
 
-            // 9. Processa cada documento
-            $docsDeletedByTicket = []; // ticket_id => [lista de nomes de documentos excluídos]
+            $docsDeletedByTicket = [];
             
             foreach ($documentIds as $docId) {
+                // Verifica limite de documentos
+                if ($processedDocs >= $maxDocsPerRun) {
+                    $stopProcessing = true;
+                    break;
+                }
+
                 $docName = $docInfo[$docId]['name'] ?? "Documento #$docId";
                 $deleted = false;
 
                 if ($deleteMode === 'total') {
-                    // Modo total: remove TODOS os vínculos e exclui o documento
                     $allLinks = $DB->request([
                         'FROM'  => $docItemTable,
                         'WHERE' => ['documents_id' => $docId]
@@ -231,8 +236,6 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
                         $task->log(sprintf(__('Documento "%s" (ID %d) excluído completamente.', 'cleanattachments'), $docName, $docId));
                     }
                 } else {
-                    // Modo órfão: remove vínculos com tickets E itens relacionados
-                    // Coleta todos os IDs de itens relacionados ao ticket
                     $allRelatedItemIds = array_merge(
                         array_map(function($id) { return ['id' => $id, 'type' => 'Ticket']; }, $ticketIds),
                         array_map(function($id) { return ['id' => $id, 'type' => 'ITILFollowup']; }, $followupIds),
@@ -240,7 +243,6 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
                         array_map(function($id) { return ['id' => $id, 'type' => 'ITILSolution']; }, $solutionIds)
                     );
 
-                    // Remove vínculos com os itens relacionados
                     foreach ($allRelatedItemIds as $item) {
                         $linksToRemove = $DB->request([
                             'FROM'  => $docItemTable,
@@ -256,7 +258,6 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
                         }
                     }
 
-                    // Verifica se o documento ficou órfão
                     $remaining = $DB->request([
                         'COUNT'  => 'cpt',
                         'FROM'   => $docItemTable,
@@ -275,7 +276,6 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
                     }
                 }
 
-                // Se o documento foi excluído, registra para qual ticket
                 if ($deleted) {
                     foreach ($ticketDocuments as $ticketId => $docs) {
                         if (isset($docs[$docId])) {
@@ -285,7 +285,7 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
                 }
             }
 
-            // 10. Adiciona acompanhamentos privados nos tickets processados
+            // Adiciona acompanhamentos privados
             foreach ($docsDeletedByTicket as $ticketId => $deletedDocNames) {
                 if (!empty($deletedDocNames)) {
                     $followup = new ITILFollowup();
@@ -297,18 +297,23 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
                             date('d/m/Y H:i:s'),
                             '• ' . implode("\n• ", $deletedDocNames)
                         ),
-                        'is_private'=> 1, // Acompanhamento privado (visível apenas para técnicos)
-                        'users_id'  => 0,  // Sistema (0 = automático)
+                        'is_private'=> 1,
+                        'users_id'  => 0,
                     ];
                     $followup->add($followupInput);
                     $task->log(sprintf(__('Ticket #%d: acompanhamento privado adicionado.', 'cleanattachments'), $ticketId));
                 }
+            }
+
+            if ($stopProcessing) {
+                break;
             }
         }
 
         if ($processedDocs > 0) {
             $cron_status = 1;
             $task->addVolume($processedDocs);
+            $task->log(sprintf(__('Processados %d documentos nesta execução.', 'cleanattachments'), $processedDocs));
         }
 
         return $cron_status;
