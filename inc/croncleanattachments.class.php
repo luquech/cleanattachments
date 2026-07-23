@@ -86,13 +86,13 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
             ]);
 
             $documentIds = [];
-            $ticketDocuments = [];
+            $ticketDocuments = []; // ticket_id => [doc_id => true]
             foreach ($directLinks as $link) {
                 $documentIds[] = $link['documents_id'];
                 $ticketDocuments[$link['items_id']][$link['documents_id']] = true;
             }
 
-            // 3. Acompanhamentos
+            // 3. Busca IDs de acompanhamentos (ITILFollowup) desses tickets
             $followups = $DB->request([
                 'FROM'  => 'glpi_itilfollowups',
                 'WHERE' => [
@@ -107,6 +107,7 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
                 $followupTicketMap[$f['id']] = $f['items_id'];
             }
 
+            // 4. Busca documentos vinculados aos acompanhamentos
             if (!empty($followupIds)) {
                 $followupLinks = $DB->request([
                     'FROM'  => $docItemTable,
@@ -124,7 +125,7 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
                 }
             }
 
-            // 4. Tarefas
+            // 5. Busca IDs de tarefas (TicketTask) desses tickets
             $tasks = $DB->request([
                 'FROM'  => 'glpi_tickettasks',
                 'WHERE' => [
@@ -138,6 +139,7 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
                 $taskTicketMap[$t['id']] = $t['tickets_id'];
             }
 
+            // 6. Busca documentos vinculados às tarefas
             if (!empty($taskIds)) {
                 $taskLinks = $DB->request([
                     'FROM'  => $docItemTable,
@@ -155,7 +157,7 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
                 }
             }
 
-            // 5. Soluções
+            // 7. Busca IDs de soluções (ITILSolution) desses tickets
             $solutions = $DB->request([
                 'FROM'  => 'glpi_itilsolutions',
                 'WHERE' => [
@@ -170,6 +172,7 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
                 $solutionTicketMap[$s['id']] = $s['items_id'];
             }
 
+            // 8. Busca documentos vinculados às soluções
             if (!empty($solutionIds)) {
                 $solutionLinks = $DB->request([
                     'FROM'  => $docItemTable,
@@ -187,6 +190,7 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
                 }
             }
 
+            // Remove duplicatas
             $documentIds = array_unique($documentIds);
 
             if (empty($documentIds)) {
@@ -194,7 +198,7 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
                 continue;
             }
 
-            // Busca informações dos documentos
+            // Busca informações dos documentos (nome)
             $docInfo = [];
             if (!empty($documentIds)) {
                 $docIterator = $DB->request([
@@ -208,10 +212,10 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
 
             $task->log(sprintf(__('Regra #%d: processando %d documentos.', 'cleanattachments'), $rule['id'], count($documentIds)));
 
-            $docsDeletedByTicket = [];
-            
+            $docsDeletedByTicket = []; // ticket_id => [nomes dos documentos excluídos]
+
+            // 9. Processa cada documento
             foreach ($documentIds as $docId) {
-                // Verifica limite de documentos
                 if ($processedDocs >= $maxDocsPerRun) {
                     $stopProcessing = true;
                     break;
@@ -236,6 +240,7 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
                         $task->log(sprintf(__('Documento "%s" (ID %d) excluído completamente.', 'cleanattachments'), $docName, $docId));
                     }
                 } else {
+                    // Modo órfão: remove vínculos com tickets e itens relacionados
                     $allRelatedItemIds = array_merge(
                         array_map(function($id) { return ['id' => $id, 'type' => 'Ticket']; }, $ticketIds),
                         array_map(function($id) { return ['id' => $id, 'type' => 'ITILFollowup']; }, $followupIds),
@@ -285,24 +290,46 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
                 }
             }
 
-            // Adiciona acompanhamentos privados
+            // 10. Adiciona acompanhamentos privados, preservando o status original
             foreach ($docsDeletedByTicket as $ticketId => $deletedDocNames) {
-                if (!empty($deletedDocNames)) {
-                    $followup = new ITILFollowup();
-                    $followupInput = [
-                        'items_id'  => $ticketId,
-                        'itemtype'  => 'Ticket',
-                        'content'   => sprintf(
-                            __('🧹 [Limpeza Automática] Em %s, o plugin Clean Attachments removeu os seguintes anexos/imagens deste chamado (por regra de limpeza):<br><br>%s<br><br>Esta ação foi executada automaticamente e não altera o status do chamado.', 'cleanattachments'),
-                            date('d/m/Y H:i:s'),
-                            '• ' . implode("• <br>", $deletedDocNames)
-                        ),
-                        'is_private'=> 1,
-                        'users_id'  => 0,
-                    ];
-                    $followup->add($followupInput);
-                    $task->log(sprintf(__('Ticket #%d: acompanhamento privado adicionado.', 'cleanattachments'), $ticketId));
+                if (empty($deletedDocNames)) continue;
+
+                // Obtém status atual do ticket
+                $ticket = new Ticket();
+                $ticket->getFromDB($ticketId);
+                $originalStatus = (int)$ticket->fields['status'];
+
+                // Cria o acompanhamento privado
+                $followup = new ITILFollowup();
+                $followupInput = [
+                    'items_id'  => $ticketId,
+                    'itemtype'  => 'Ticket',
+                    'content'   => nl2br(sprintf(
+                        __('🧹 [Limpeza Automática] Em %s, o plugin Clean Attachments removeu os seguintes anexos/imagens deste chamado (por regra de limpeza):<br><br>%s<br><br>Esta ação foi executada automaticamente e não altera o status do chamado.', 'cleanattachments'),
+                        date('d/m/Y H:i:s'),
+                        '• ' . implode('<br>• ', $deletedDocNames)
+                    )),
+                    'is_private'=> 1,
+                    'users_id'  => 0,
+                ];
+                $followup->add($followupInput);
+
+                // Se o status foi alterado (reabertura automática), restaura o original
+                $ticket->getFromDB($ticketId);
+                if ((int)$ticket->fields['status'] !== $originalStatus) {
+                    $DB->update(
+                        'glpi_tickets',
+                        ['status' => $originalStatus],
+                        ['id' => $ticketId]
+                    );
+                    $task->log(sprintf(
+                        __('Ticket #%d: status restaurado para %s após acompanhamento automático.', 'cleanattachments'),
+                        $ticketId,
+                        $originalStatus
+                    ));
                 }
+
+                $task->log(sprintf(__('Ticket #%d: acompanhamento privado adicionado.', 'cleanattachments'), $ticketId));
             }
 
             if ($stopProcessing) {
