@@ -293,9 +293,9 @@ class PluginCleanattachmentsCroncleanattachments extends CommonDBTM {
                         'items_id'  => $ticketId,
                         'itemtype'  => 'Ticket',
                         'content'   => sprintf(
-                            __('🧹 [Limpeza Automática] Em %s, o plugin Clean Attachments removeu os seguintes anexos/imagens deste chamado (por regra de limpeza):\n\n%s\n\nEsta ação foi executada automaticamente e não altera o status do chamado.', 'cleanattachments'),
+                            __('🧹 [Limpeza Automática] Em %s, o plugin Clean Attachments removeu os seguintes anexos/imagens deste chamado (por regra de limpeza):<br><br>%s<br><br>Esta ação foi executada automaticamente e não altera o status do chamado.', 'cleanattachments'),
                             date('d/m/Y H:i:s'),
-                            '• ' . implode("\n• ", $deletedDocNames)
+                            '• ' . implode("• <br>", $deletedDocNames)
                         ),
                         'is_private'=> 1,
                         'users_id'  => 0,
