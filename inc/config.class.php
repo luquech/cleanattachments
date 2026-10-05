@@ -1,7 +1,16 @@
 <?php
-class PluginCleanattachmentsConfig extends CommonDBTM {
+// GLPI 12 exige $rightname tipada (string); GLPI 10 proíbe o tipo.
+if ((new ReflectionProperty('CommonDBTM', 'rightname'))->hasType()) {
+    abstract class PluginCleanattachmentsConfigBase extends CommonDBTM {
+        public static string $rightname = 'config';
+    }
+} else {
+    abstract class PluginCleanattachmentsConfigBase extends CommonDBTM {
+        public static $rightname = 'config';
+    }
+}
 
-    public static $rightname = 'config';
+class PluginCleanattachmentsConfig extends PluginCleanattachmentsConfigBase {
 
     static function getTable($classname = null) {
         return 'glpi_plugin_cleanattachments_config';
@@ -26,7 +35,7 @@ class PluginCleanattachmentsConfig extends CommonDBTM {
 
     static function displayTabContentForItem(CommonGLPI $item, $tabnum = 1, $withtemplate = 0) {
         if ($item->getType() == 'PluginCleanattachmentsConfig') {
-            Html::redirect(Plugin::getWebDir('cleanattachments') . '/front/config.php');
+            Html::redirect(\Plugin::getPhpDir('cleanattachments', false) . '/front/config.php');
         }
         return true;
     }
@@ -81,7 +90,7 @@ class PluginCleanattachmentsConfig extends CommonDBTM {
             ];
         }
 
-        echo "<form method='post' action='" . Plugin::getWebDir('cleanattachments') . "/front/config.php'>";
+        echo "<form method='post' action='" . \Plugin::getPhpDir('cleanattachments', false) . "/front/config.php'>";
         echo "<input type='hidden' name='_glpi_csrf_token' value='" . Session::getNewCSRFToken() . "'>";
         echo "<input type='hidden' name='id' value='" . $this->fields['id'] . "'>";
         echo "<table class='tab_cadre_fixe'>";
@@ -167,7 +176,7 @@ class PluginCleanattachmentsConfig extends CommonDBTM {
             echo "&nbsp;";
             
             // Formulário POST para exclusão com token CSRF
-            echo "<form method='post' action='" . Plugin::getWebDir('cleanattachments') . "/front/config.php' style='display:inline;'>";
+            echo "<form method='post' action='" . \Plugin::getPhpDir('cleanattachments', false) . "/front/config.php' style='display:inline;'>";
             echo "<input type='hidden' name='_glpi_csrf_token' value='" . Session::getNewCSRFToken() . "'>";
             echo "<input type='hidden' name='delete' value='" . $row['id'] . "'>";
             echo "<button type='submit' class='btn btn-link p-0' onclick='return confirm(\"" . htmlescape(__('Deseja realmente excluir?')) . "\")' title='" . htmlescape(__('Excluir')) . "'>";
